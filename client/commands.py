@@ -19,8 +19,52 @@ def confirm(access_key, server_address, session_data, box) -> DNSRecord:
     return send_dns_query(f"{session_data['session_id']}._dftp.endcommand.", server_address)
 
 
-def ls(args: list[str]):
-    pass
+def ls(meta: CommandMeta, args: list[str]):
+    md5_hash, access_key, num_chunks = parse_dns_response(meta.response, meta.box)
+    if not md5_hash or not access_key or not num_chunks:
+        print("Error: Incomplete response from server.")
+        return
+
+    print(f"Retrieving ls listing. Have to collect {num_chunks} chunks. Expected MD5: {md5_hash}")
+
+    combined_b64 = combine_chunks(access_key, meta.server_address, num_chunks)
+
+    try:
+        encrypted_data = base64.b64decode(combined_b64)
+        decrypted_data = meta.box.decrypt(encrypted_data).decode('utf-8')
+    except Exception as e:
+        print(f"Error during decryption: {e}")
+        return
+
+    actual_md5 = hashlib.md5(decrypted_data.encode('utf-8')).hexdigest()
+
+    if actual_md5 != md5_hash:
+        print("Error: MD5 checksum mismatch. Listing data may be corrupt.")
+        return
+    print()
+    filename_header = "Filename"
+    size_header = "Size"
+    filename_width = max(len(filename_header), max(len(line.split(':')[2]) for line in decrypted_data.split('\n') if line.startswith("F:")))
+    size_width = max(len(size_header), 10)
+    total_width = filename_width + size_width + 1
+
+    print(f"{filename_header:<{filename_width}} {size_header:>{size_width}}")
+    print("-" * total_width)
+    for line in decrypted_data.split('\n'):
+        if line.startswith("F:"):
+            _, size_bytes, filename, _ = line.split(':')
+            size_hr = bytes_to_human_readable(int(size_bytes))
+            print(f"{filename:<{filename_width}} {size_hr:>{size_width}}")
+        elif line.startswith("D:"):
+            _, dirname = line.split(':')
+            print(f"{dirname + '/':<{filename_width}} {'-':>{size_width}}")
+
+    confirm_response = confirm(access_key, meta.server_address, meta.session_data, meta.box)
+    if confirm_response is None or confirm_response.header.rcode == RCODE.SERVFAIL:
+        print("Error: Failed to send confirm command.")
+        return
+    
+    print("\nDirectory listing transfer confirmed with server.")
 
 
 def get(meta: CommandMeta, args: list[str]):

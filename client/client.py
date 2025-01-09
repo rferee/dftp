@@ -5,10 +5,8 @@ import hashlib
 import sys
 import os
 
-from commands import CommandMeta, confirm, get
-from dns import send_dns_query, exchange_keys, validate_challenge, bytes_to_human_readable
-from utils import combine_chunks, parse_dns_response
-
+from commands import CommandMeta, get, ls
+from dns import send_dns_query, exchange_keys, validate_challenge
 def handle_cli(session_data, server_address):
     COMMANDS = ["ls", "get"]
 
@@ -42,51 +40,7 @@ def handle_cli(session_data, server_address):
 
         meta = CommandMeta(response, server_address, session_data, box)
         if parts[0] == "ls":
-            md5_hash, access_key, num_chunks = parse_dns_response(response, box)
-            if not md5_hash or not access_key or not num_chunks:
-                print("Error: Incomplete response from server.")
-                continue
-
-            print(f"Retrieving ls listing. Have to collect {num_chunks} chunks. Expected MD5: {md5_hash}")
-
-            combined_b64 = combine_chunks(access_key, server_address, num_chunks)
-
-            try:
-                encrypted_data = base64.b64decode(combined_b64)
-                decrypted_data = box.decrypt(encrypted_data).decode('utf-8')
-            except Exception as e:
-                print(f"Error during decryption: {e}")
-                continue
-
-            actual_md5 = hashlib.md5(decrypted_data.encode('utf-8')).hexdigest()
-
-            if actual_md5 != md5_hash:
-                print("Error: MD5 checksum mismatch. Listing data may be corrupt.")
-                continue
-            print()
-            filename_header = "Filename"
-            size_header = "Size"
-            filename_width = max(len(filename_header), max(len(line.split(':')[2]) for line in decrypted_data.split('\n') if line.startswith("F:")))
-            size_width = max(len(size_header), 10)
-            total_width = filename_width + size_width + 1
-
-            print(f"{filename_header:<{filename_width}} {size_header:>{size_width}}")
-            print("-" * total_width)
-            for line in decrypted_data.split('\n'):
-                if line.startswith("F:"):
-                    _, size_bytes, filename, _ = line.split(':')
-                    size_hr = bytes_to_human_readable(int(size_bytes))
-                    print(f"{filename:<{filename_width}} {size_hr:>{size_width}}")
-                elif line.startswith("D:"):
-                    _, dirname = line.split(':')
-                    print(f"{dirname + '/':<{filename_width}} {'-':>{size_width}}")
-
-            confirm_response = confirm(access_key, server_address, session_data, box)
-            if confirm_response is None or confirm_response.header.rcode == RCODE.SERVFAIL:
-                print("Error: Failed to send confirm command.")
-                continue
-            print("\nDirectory listing transfer confirmed with server.")
-
+            ls(meta, parts[1:])
         elif parts[0] == "get" and len(parts) >= 2:
             get(meta, parts[1:])
             
