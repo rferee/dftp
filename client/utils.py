@@ -2,6 +2,21 @@ from tqdm import tqdm
 
 from dns import *
 
+def parse_dns_response(response: DNSRecord, box: Box) -> tuple:
+    md5_hash = ""
+    access_key = ""
+    num_chunks = 0
+    for rr in response.rr:
+        encrypted_val_b64 = str(rr.rdata)
+        decrypted_val = box.decrypt(base64.b64decode(encrypted_val_b64)).decode('utf-8')
+        if decrypted_val.startswith("MD5:"):
+            md5_hash = decrypted_val.split(":", 1)[1]
+        elif decrypted_val.startswith("AK:"):
+            access_key = decrypted_val.split(":", 1)[1]
+        elif decrypted_val.startswith("NOC:"):
+            num_chunks = int(decrypted_val.split(":", 1)[1])
+    return md5_hash, access_key, num_chunks
+
 def combine_chunks(access_key, server_address, chunks_num) -> list[str]:
     combined_b64_chunks = []
     for chunk_num in tqdm(range(chunks_num)):

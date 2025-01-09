@@ -6,7 +6,7 @@ import sys
 import os
 
 from dns import send_dns_query, exchange_keys, validate_challenge, bytes_to_human_readable
-from utils import combine_chunks
+from utils import combine_chunks, parse_dns_response
 
 def handle_cli(session_data, server_address):
     COMMANDS = ["ls", "get"]
@@ -57,19 +57,8 @@ def handle_cli(session_data, server_address):
                     _, dirname = entry_parts
                     print(f"{dirname + '/':<30} {'-':>10} {'-':>32}")
 
-            md5_hash = ""
-            access_key = ""
-            num_chunks = 0
-            for rr in response.rr:
-                encrypted_val_b64 = str(rr.rdata)
-                decrypted_val = box.decrypt(base64.b64decode(encrypted_val_b64)).decode('utf-8')
-                if decrypted_val.startswith("MD5:"):
-                    md5_hash = decrypted_val.split(":", 1)[1]
-                elif decrypted_val.startswith("AK:"):
-                    access_key = decrypted_val.split(":", 1)[1]
-                elif decrypted_val.startswith("NOC:"):
-                    num_chunks = int(decrypted_val.split(":", 1)[1])
-
+            md5_hash, access_key, num_chunks = parse_dns_response(response, box)
+            # FIX: incoreect value validation ("" is None == False)
             if not md5_hash or not access_key or not num_chunks:
                 print("Error: Incomplete response from server.")
                 continue
@@ -121,19 +110,8 @@ def handle_cli(session_data, server_address):
                 print("\nDirectory listing transfer confirmed with server.") 
         elif parts[0] == "get" and len(parts) >= 2:
             filename = parts[1]
-            md5_hash = ""
-            access_key = ""
-            num_chunks = 0
-            for rr in response.rr:
-                encrypted_val_b64 = str(rr.rdata)
-                decrypted_val = box.decrypt(base64.b64decode(encrypted_val_b64)).decode('utf-8')
-                if decrypted_val.startswith("MD5:"):
-                    md5_hash = decrypted_val.split(":", 1)[1]
-                elif decrypted_val.startswith("AK:"):
-                    access_key = decrypted_val.split(":", 1)[1]
-                elif decrypted_val.startswith("NOC:"):
-                    num_chunks = int(decrypted_val.split(":", 1)[1])
-
+            md5_hash, access_key, num_chunks = parse_dns_response(response, box)
+            # FIX: incoreect value validation ("" is None == False)
             if not md5_hash or not access_key or not num_chunks:
                 print("Error: Incomplete response from server.")
                 continue
