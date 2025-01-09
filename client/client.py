@@ -87,7 +87,7 @@ def handle_cli(session_data, server_address):
                 print("Error: Invalid query or no response from server.")
                 continue
 
-            parts = command.split()
+            parts = command.split(maxsplit=1)
             if parts[0] == "ls":
                 for rr in response.rr:
                     encrypted_entry_b64 = str(rr.rdata)
@@ -187,7 +187,7 @@ def handle_cli(session_data, server_address):
                         print("\nDirectory listing transfer confirmed with server.")
                 else:
                     print("Error: MD5 checksum mismatch. Listing data may be corrupt.")
-            elif parts[0] == "get" and len(parts) == 2:
+            elif parts[0] == "get" and len(parts) >= 2:
                 filename = parts[1]
                 md5_hash = ""
                 access_key = ""

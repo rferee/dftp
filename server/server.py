@@ -276,11 +276,11 @@ def handle_endcommand_query(qname, reply, private_key):
         payload_encrypted = base64.b64decode(combined_b64)
         full_command = box.decrypt(payload_encrypted).decode('utf-8')
         print(f"Received command: {full_command}")
-        parts = full_command.split()
-
+        parts = full_command.split(maxsplit=1)
+        
         if parts[0] == "ls":
             handle_ls_command(session_id, reply, private_key)
-        elif parts[0] == "get" and len(parts) == 2:
+        elif parts[0] == "get" and len(parts) >= 2:
             handle_get_command(session_id, reply, private_key, parts[1])
         elif parts[0] == "confirm" and len(parts) == 2:
             handle_confirm_command(session_id, reply, private_key, parts[1])
