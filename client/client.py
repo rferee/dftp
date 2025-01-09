@@ -5,6 +5,7 @@ from tqdm import tqdm
 import base64
 import hashlib
 import math
+import sys
 
 def send_dns_query(query_name, server_address):
     query = DNSRecord.question(query_name, qtype="TXT")
@@ -169,7 +170,14 @@ def handle_cli(session_data, server_address):
                 print("Error: Unknown command.")
 
 def main():
-    SERVER_ADDRESS = ("127.0.0.1", 5500)
+    if len(sys.argv) > 1:
+        try:
+            server_ip, port = sys.argv[1].split(':')
+            SERVER_ADDRESS = (server_ip, int(port))
+        except:
+            SERVER_ADDRESS = ("127.0.0.1", 5500)
+    else:
+        SERVER_ADDRESS = ("127.0.0.1", 5500)
 
     client_private_key = PrivateKey.generate()
 
