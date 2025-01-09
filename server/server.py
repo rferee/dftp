@@ -144,22 +144,41 @@ def handle_ls_command(session_id, reply, private_key):
     box = create_box(private_key, client_pubkey)
     try:
         entries = os.listdir(FILES_DIRECTORY)
+        lines = []
         for entry in entries:
             entry_path = os.path.join(FILES_DIRECTORY, entry)
             if os.path.isfile(entry_path):
-                entry_type = "F"
                 file_size = os.path.getsize(entry_path)
-                entry_data = f"{entry_type}:{file_size}:{entry}"
+                md5_hash = hashlib.md5(open(entry_path,"rb").read()).hexdigest()
+                lines.append(f"F:{file_size}:{entry}:{md5_hash}")
             elif os.path.isdir(entry_path):
-                entry_type = "D"
-                entry_data = f"{entry_type}:{entry}"
-            else:
-                continue
-            encrypted_entry = box.encrypt(entry_data.encode('utf-8'))
-            encrypted_entry_b64 = base64.b64encode(encrypted_entry).decode('utf-8')
-            reply.add_answer(RR(session_id, QTYPE.TXT, rdata=TXT(encrypted_entry_b64)))
+                lines.append(f"D:{entry}")
+
+        listing_str = "\n".join(lines)
+        encrypted_listing = box.encrypt(listing_str.encode('utf-8'))
+        b64_encrypted = base64.b64encode(encrypted_listing).decode('utf-8')
+        md5_hash_list = hashlib.md5(listing_str.encode('utf-8')).hexdigest()
+        access_key = str(uuid.uuid4())
+
+        if not os.path.exists(TMP_DIRECTORY):
+            os.makedirs(TMP_DIRECTORY)
+
+        chunk_size = 252
+        chunks = [b64_encrypted[i:i+chunk_size] for i in range(0, len(b64_encrypted), chunk_size)]
+        for idx, chunk_data in enumerate(chunks):
+            with open(os.path.join(TMP_DIRECTORY, f"{idx}.{access_key}.chunk"), "w") as cf:
+                cf.write(chunk_data)
+
+        md5_enc = box.encrypt(f"MD5:{md5_hash_list}".encode('utf-8'))
+        ak_enc = box.encrypt(f"AK:{access_key}".encode('utf-8'))
+        noc_enc = box.encrypt(f"NOC:{len(chunks)}".encode('utf-8'))
+
+        reply.add_answer(RR(session_id, QTYPE.TXT, rdata=TXT(base64.b64encode(md5_enc).decode('utf-8'))))
+        reply.add_answer(RR(session_id, QTYPE.TXT, rdata=TXT(base64.b64encode(ak_enc).decode('utf-8'))))
+        reply.add_answer(RR(session_id, QTYPE.TXT, rdata=TXT(base64.b64encode(noc_enc).decode('utf-8'))))
+
         reply.header.rcode = RCODE.NOERROR
-        print(f"[DEBUG] Listed files for session {session_id}")
+        print("[DEBUG] File listing chunks prepared, access key returned")
     except Exception as e:
         print(f"Error listing files: {e}")
         reply.header.rcode = RCODE.SERVFAIL
