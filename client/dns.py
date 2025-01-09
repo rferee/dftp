@@ -3,6 +3,8 @@ import socket
 from nacl.public import Box, PublicKey
 import base64
 
+CHUNK_SIZE = 63
+
 def send_dns_query(query_name, server_address, timeout=120):
     query = DNSRecord.question(query_name, qtype="TXT")
 

@@ -5,6 +5,7 @@ import hashlib
 import sys
 import os
 
+from commands import confirm
 from dns import send_dns_query, exchange_keys, validate_challenge, bytes_to_human_readable
 from utils import combine_chunks, parse_dns_response
 
@@ -58,7 +59,7 @@ def handle_cli(session_data, server_address):
                     print(f"{dirname + '/':<30} {'-':>10} {'-':>32}")
 
             md5_hash, access_key, num_chunks = parse_dns_response(response, box)
-            # FIX: incoreect value validation ("" is None == False)
+            # FIX: incorrect value validation ("" is None == False)
             if not md5_hash or not access_key or not num_chunks:
                 print("Error: Incomplete response from server.")
                 continue
@@ -96,22 +97,17 @@ def handle_cli(session_data, server_address):
                 elif line.startswith("D:"):
                     _, dirname = line.split(':')
                     print(f"{dirname + '/':<{filename_width}} {'-':>{size_width}}")
-            confirm_cmd = f"confirm {access_key}"
-            enc_cmd = box.encrypt(confirm_cmd.encode('utf-8'))
-            b64_cmd = base64.b64encode(enc_cmd).decode('utf-8')
-            send_dns_query(f"{session_data['session_id']}._dftp.begincommand.", server_address)
-            for i in range(0, len(b64_cmd), chunk_size):
-                chunk = b64_cmd[i:i+chunk_size]
-                send_dns_query(f"{chunk}.{session_data['session_id']}._dftp.command.", server_address)
-            response2 = send_dns_query(f"{session_data['session_id']}._dftp.endcommand.", server_address)
-            if response2 is None or response2.header.rcode == RCODE.SERVFAIL:
+
+            confirm_response = confirm(access_key, server_address, session_data, box)
+            if confirm_response is None or confirm_response.header.rcode == RCODE.SERVFAIL:
                 print("Error: Failed to send confirm command.")
-            else:
-                print("\nDirectory listing transfer confirmed with server.") 
+                continue
+            print("\nDirectory listing transfer confirmed with server.")
+
         elif parts[0] == "get" and len(parts) >= 2:
             filename = parts[1]
             md5_hash, access_key, num_chunks = parse_dns_response(response, box)
-            # FIX: incoreect value validation ("" is None == False)
+            # FIX: incorrect value validation ("" is None == False)
             if not md5_hash or not access_key or not num_chunks:
                 print("Error: Incomplete response from server.")
                 continue
@@ -141,18 +137,12 @@ def handle_cli(session_data, server_address):
             
             with open(filename, "wb") as f:
                 f.write(decrypted_data)
-            confirm_cmd = f"confirm {access_key}"
-            enc_cmd = box.encrypt(confirm_cmd.encode('utf-8'))
-            b64_cmd = base64.b64encode(enc_cmd).decode('utf-8')
-            send_dns_query(f"{session_data['session_id']}._dftp.begincommand.", server_address)
-            for i in range(0, len(b64_cmd), chunk_size):
-                chunk = b64_cmd[i:i+chunk_size]
-                send_dns_query(f"{chunk}.{session_data['session_id']}._dftp.command.", server_address)
-            response2 = send_dns_query(f"{session_data['session_id']}._dftp.endcommand.", server_address)
-            if response2 is None or response2.header.rcode == RCODE.SERVFAIL:
+
+            confirm_response = confirm(access_key, server_address, session_data, box)
+            if confirm_response is None or confirm_response.header.rcode == RCODE.SERVFAIL:
                 print("Error: Failed to send confirm command.")
-            else:
-                print("File transfer confirmed with server.")
+                continue
+            print("File transfer confirmed with server.")
             
 
 def main():
