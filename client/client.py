@@ -42,19 +42,6 @@ def handle_cli(session_data, server_address):
 
         meta = CommandMeta(response, server_address, session_data, box)
         if parts[0] == "ls":
-            for rr in response.rr:
-                encrypted_entry_b64 = str(rr.rdata)
-                encrypted_entry = base64.b64decode(encrypted_entry_b64)
-                entry = box.decrypt(encrypted_entry).decode('utf-8')
-                entry_parts = entry.split(':')
-                if entry_parts[0] == "F" and len(entry_parts) == 4:
-                    _, size_bytes, filename, md5_hash = entry_parts
-                    size_hr = bytes_to_human_readable(int(size_bytes))
-                    print(f"{filename:<30} {size_hr:>10} {md5_hash:>32}")
-                elif entry_parts[0] == "D" and len(entry_parts) == 2:
-                    _, dirname = entry_parts
-                    print(f"{dirname + '/':<30} {'-':>10} {'-':>32}")
-
             md5_hash, access_key, num_chunks = parse_dns_response(response, box)
             if not md5_hash or not access_key or not num_chunks:
                 print("Error: Incomplete response from server.")
