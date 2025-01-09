@@ -251,7 +251,10 @@ def handle_cli(session_data, server_address):
 
                 if actual_md5 == md5_hash:
                     print(f"File '{filename}' retrieved successfully.")
-                    os.makedirs(os.path.dirname(filename), exist_ok=True)
+                    
+                    if os.path.dirname(filename):
+                        os.makedirs(os.path.dirname(filename), exist_ok=True)
+                    
                     with open(filename, "wb") as f:
                         f.write(decrypted_data)
                     confirm_cmd = f"confirm {access_key}"
