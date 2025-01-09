@@ -133,8 +133,11 @@ def handle_command_chunk(qname, reply, private_key):
     reply.header.rcode = RCODE.NOERROR
     print(f"[DEBUG] Stored command chunk for session {session_id}")
 
-def handle_ls_command(session_id, reply, private_key):
-    print(f"[DEBUG] handle_ls_command called for session {session_id}")
+def is_safe_path(base_path, target_path):
+    return os.path.realpath(target_path).startswith(os.path.realpath(base_path))
+
+def handle_ls_command(session_id, reply, private_key, directory=""):
+    print(f"[DEBUG] handle_ls_command called for session {session_id}, directory: {directory}")
     session = get_session_or_fail(session_id, reply)
     if not session:
         print("[DEBUG] Listing files failed")
@@ -143,13 +146,19 @@ def handle_ls_command(session_id, reply, private_key):
     client_pubkey = session["client_pubkey"]
     box = create_box(private_key, client_pubkey)
     try:
-        entries = os.listdir(FILES_DIRECTORY)
+        target_directory = os.path.join(FILES_DIRECTORY, directory)
+        if not is_safe_path(FILES_DIRECTORY, target_directory) or not os.path.exists(target_directory):
+            reply.header.rcode = RCODE.SERVFAIL
+            print(f"[DEBUG] Directory {target_directory} is not safe or does not exist")
+            return
+
+        entries = os.listdir(target_directory)
         lines = []
         for entry in entries:
-            entry_path = os.path.join(FILES_DIRECTORY, entry)
+            entry_path = os.path.join(target_directory, entry)
             if os.path.isfile(entry_path):
                 file_size = os.path.getsize(entry_path)
-                md5_hash = hashlib.md5(open(entry_path,"rb").read()).hexdigest()
+                md5_hash = hashlib.md5(open(entry_path, "rb").read()).hexdigest()
                 lines.append(f"F:{file_size}:{entry}:{md5_hash}")
             elif os.path.isdir(entry_path):
                 lines.append(f"D:{entry}")
@@ -192,7 +201,7 @@ def handle_get_command(session_id, reply, private_key, filename):
         return
 
     file_path = os.path.join(FILES_DIRECTORY, filename)
-    if not os.path.isfile(file_path):
+    if not is_safe_path(FILES_DIRECTORY, file_path) or not os.path.isfile(file_path):
         reply.header.rcode = RCODE.SERVFAIL
         print(f"[DEBUG] Failed to process get command for {filename}")
         return
@@ -277,9 +286,10 @@ def handle_endcommand_query(qname, reply, private_key):
         full_command = box.decrypt(payload_encrypted).decode('utf-8')
         print(f"Received command: {full_command}")
         parts = full_command.split(maxsplit=1)
-        
+
         if parts[0] == "ls":
-            handle_ls_command(session_id, reply, private_key)
+            directory = parts[1] if len(parts) > 1 else ""
+            handle_ls_command(session_id, reply, private_key, directory)
         elif parts[0] == "get" and len(parts) >= 2:
             handle_get_command(session_id, reply, private_key, parts[1])
         elif parts[0] == "confirm" and len(parts) == 2:

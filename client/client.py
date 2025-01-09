@@ -6,6 +6,7 @@ import base64
 import hashlib
 import math
 import sys
+import os
 
 def send_dns_query(query_name, server_address, timeout=120):
     query = DNSRecord.question(query_name, qtype="TXT")
@@ -66,6 +67,10 @@ def bytes_to_human_readable(num_bytes):
 def handle_cli(session_data, server_address):
     while True:
         command = input("dftp> ")
+
+        if command.startswith("get"):
+            print("Warning: Priming the file for transfer may take a while. Please be patient.\n")
+
         if command == "exit":
             print("Exiting client.")
             break
@@ -246,6 +251,7 @@ def handle_cli(session_data, server_address):
 
                 if actual_md5 == md5_hash:
                     print(f"File '{filename}' retrieved successfully.")
+                    os.makedirs(os.path.dirname(filename), exist_ok=True)
                     with open(filename, "wb") as f:
                         f.write(decrypted_data)
                     confirm_cmd = f"confirm {access_key}"
