@@ -1,4 +1,4 @@
-from dnslib import DNSRecord, QTYPE, RCODE
+from dnslib import DNSRecord, RCODE
 import socket
 from nacl.public import Box, PublicKey
 import base64

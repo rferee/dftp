@@ -116,8 +116,8 @@ COMMANDS = {
 }
 
 
-def process(command: str, args: list[str]) -> None:
+def execute(command: str, meta: CommandMeta, args: list[str]) -> None:
     if command not in COMMANDS:
         print(f"Unknown command: {command}")
         return
-    COMMANDS[command](args)
+    COMMANDS[command](meta, args)

@@ -17,6 +17,7 @@ def parse_dns_response(response: DNSRecord, box: Box) -> tuple:
             num_chunks = int(decrypted_val.split(":", 1)[1])
     return md5_hash, access_key, num_chunks
 
+
 def combine_chunks(access_key, server_address, chunks_num) -> list[str]:
     combined_b64_chunks = []
     for chunk_num in tqdm(range(chunks_num)):
