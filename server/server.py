@@ -10,7 +10,7 @@ import hashlib
 
 SERVER_VERSION = "1.0.0"
 FILES_DIRECTORY = "./files"
-TMP_DIRECTORY = "./tmp"
+CHUNKS_DIRECTORY = "./tmp"
 client_sessions = {}
 
 def generate_random_string(length=16):
@@ -169,13 +169,13 @@ def handle_ls_command(session_id, reply, private_key, directory=""):
         md5_hash_list = hashlib.md5(listing_str.encode('utf-8')).hexdigest()
         access_key = str(uuid.uuid4())
 
-        if not os.path.exists(TMP_DIRECTORY):
-            os.makedirs(TMP_DIRECTORY)
+        if not os.path.exists(CHUNKS_DIRECTORY):
+            os.makedirs(CHUNKS_DIRECTORY)
 
         chunk_size = 252
         chunks = [b64_encrypted[i:i+chunk_size] for i in range(0, len(b64_encrypted), chunk_size)]
         for idx, chunk_data in enumerate(chunks):
-            with open(os.path.join(TMP_DIRECTORY, f"{idx}.{access_key}.chunk"), "w") as cf:
+            with open(os.path.join(CHUNKS_DIRECTORY, f"{idx}.{access_key}.chunk"), "w") as cf:
                 cf.write(chunk_data)
 
         md5_enc = box.encrypt(f"MD5:{md5_hash_list}".encode('utf-8'))
@@ -214,13 +214,13 @@ def handle_get_command(session_id, reply, private_key, filename):
     md5_hash = hashlib.md5(file_content).hexdigest()
 
     access_key = str(uuid.uuid4())
-    if not os.path.exists(TMP_DIRECTORY):
-        os.makedirs(TMP_DIRECTORY)
+    if not os.path.exists(CHUNKS_DIRECTORY):
+        os.makedirs(CHUNKS_DIRECTORY)
 
     chunk_size = 252
     chunks = [b64_encrypted[i:i+chunk_size] for i in range(0, len(b64_encrypted), chunk_size)]
     for idx, chunk_data in enumerate(chunks):
-        with open(os.path.join(TMP_DIRECTORY, f"{idx}.{access_key}.chunk"), "w") as cf:
+        with open(os.path.join(CHUNKS_DIRECTORY, f"{idx}.{access_key}.chunk"), "w") as cf:
             cf.write(chunk_data)
 
     md5_enc = box.encrypt(f"MD5:{md5_hash}".encode('utf-8'))
@@ -244,7 +244,7 @@ def handle_getchunk_query(qname, reply, private_key):
         print("[DEBUG] Failed to serve chunk")
         return
 
-    chunk_file = os.path.join(TMP_DIRECTORY, f"{chunk_str}.{access_key}.chunk")
+    chunk_file = os.path.join(CHUNKS_DIRECTORY, f"{chunk_str}.{access_key}.chunk")
     if not os.path.exists(chunk_file):
         reply.header.rcode = RCODE.SERVFAIL
         print("[DEBUG] Failed to serve chunk")
@@ -263,9 +263,9 @@ def handle_confirm_command(session_id, reply, private_key, access_key):
     if not session:
         return
 
-    for fn in os.listdir(TMP_DIRECTORY):
+    for fn in os.listdir(CHUNKS_DIRECTORY):
         if fn.endswith(f"{access_key}.chunk"):
-            os.remove(os.path.join(TMP_DIRECTORY, fn))
+            os.remove(os.path.join(CHUNKS_DIRECTORY, fn))
 
     reply.header.rcode = RCODE.NOERROR
     print(f"[DEBUG] Confirmed and removed chunks for access_key {access_key}")
