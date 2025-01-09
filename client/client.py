@@ -7,14 +7,18 @@ import hashlib
 import math
 import sys
 
-def send_dns_query(query_name, server_address):
+def send_dns_query(query_name, server_address, timeout=120):
     query = DNSRecord.question(query_name, qtype="TXT")
 
     with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
-        sock.sendto(query.pack(), server_address)
-        response, _ = sock.recvfrom(512)
-        response_record = DNSRecord.parse(response)
-        return response_record
+        sock.settimeout(timeout)
+        try:
+            sock.sendto(query.pack(), server_address)
+            response, _ = sock.recvfrom(512)
+            response_record = DNSRecord.parse(response)
+            return response_record
+        except socket.timeout:
+            return None
 
 def sanitize_dns_label(label):
     return label.replace('"', '').replace("'", '')
@@ -79,8 +83,8 @@ def handle_cli(session_data, server_address):
 
             response = send_dns_query(f"{session_data['session_id']}._dftp.endcommand.", server_address)
 
-            if response.header.rcode == RCODE.SERVFAIL:
-                print("Error: Invalid query.")
+            if response is None or response.header.rcode == RCODE.SERVFAIL:
+                print("Error: Invalid query or no response from server.")
                 continue
 
             parts = command.split()
@@ -119,14 +123,22 @@ def handle_cli(session_data, server_address):
 
                 combined_b64_chunks = []
                 for chunk_num in tqdm(range(num_chunks)):
-                    qr = send_dns_query(f"{chunk_num}.{access_key}._dftp.getchunk.", server_address)
-                    if qr.header.rcode == RCODE.SERVFAIL:
-                        print("Error: Failed to retrieve a chunk.")
+                    attempts = 0
+                    success = False
+                    while attempts < 3 and not success:
+                        qr = send_dns_query(f"{chunk_num}.{access_key}._dftp.getchunk.", server_address, timeout=3)
+                        if qr is not None:
+                            for crr in qr.rr:
+                                chunk_enc_b64 = str(crr.rdata)
+                                combined_b64_chunks.append(chunk_enc_b64)
+                            success = True
+                        else:
+                            attempts += 1
+                            print(f"Timeout retrieving chunk {chunk_num}, retrying ({attempts}/3)...")
+                    if not success:
+                        print("Error: Failed to retrieve chunk after 3 attempts.")
                         combined_b64_chunks = []
                         break
-                    for crr in qr.rr:
-                        chunk_enc_b64 = str(crr.rdata)
-                        combined_b64_chunks.append(chunk_enc_b64)
 
                 if not combined_b64_chunks:
                     print("Error: Failed to retrieve all chunks.")
@@ -169,7 +181,7 @@ def handle_cli(session_data, server_address):
                         chunk = b64_cmd[i:i+chunk_size]
                         send_dns_query(f"{chunk}.{session_data['session_id']}._dftp.command.", server_address)
                     response2 = send_dns_query(f"{session_data['session_id']}._dftp.endcommand.", server_address)
-                    if response2.header.rcode == RCODE.SERVFAIL:
+                    if response2 is None or response2.header.rcode == RCODE.SERVFAIL:
                         print("Error: Failed to send confirm command.")
                     else:
                         print("\nDirectory listing transfer confirmed with server.")
@@ -198,14 +210,22 @@ def handle_cli(session_data, server_address):
 
                 combined_b64_chunks = []
                 for chunk_num in tqdm(range(num_chunks)):
-                    qr = send_dns_query(f"{chunk_num}.{access_key}._dftp.getchunk.", server_address)
-                    if qr.header.rcode == RCODE.SERVFAIL:
-                        print("Error: Failed to retrieve a chunk.")
+                    attempts = 0
+                    success = False
+                    while attempts < 3 and not success:
+                        qr = send_dns_query(f"{chunk_num}.{access_key}._dftp.getchunk.", server_address, timeout=3)
+                        if qr is not None:
+                            for crr in qr.rr:
+                                chunk_enc_b64 = str(crr.rdata)
+                                combined_b64_chunks.append(chunk_enc_b64)
+                            success = True
+                        else:
+                            attempts += 1
+                            print(f"Timeout retrieving chunk {chunk_num}, retrying ({attempts}/3)...")
+                    if not success:
+                        print("Error: Failed to retrieve chunk after 3 attempts.")
                         combined_b64_chunks = []
                         break
-                    for crr in qr.rr:
-                        chunk_enc_b64 = str(crr.rdata)
-                        combined_b64_chunks.append(chunk_enc_b64)
 
                 if not combined_b64_chunks:
                     print("Error: Failed to retrieve all chunks.")
@@ -236,7 +256,7 @@ def handle_cli(session_data, server_address):
                         chunk = b64_cmd[i:i+chunk_size]
                         send_dns_query(f"{chunk}.{session_data['session_id']}._dftp.command.", server_address)
                     response2 = send_dns_query(f"{session_data['session_id']}._dftp.endcommand.", server_address)
-                    if response2.header.rcode == RCODE.SERVFAIL:
+                    if response2 is None or response2.header.rcode == RCODE.SERVFAIL:
                         print("Error: Failed to send confirm command.")
                     else:
                         print("File transfer confirmed with server.")
