@@ -1,4 +1,12 @@
+from collections import namedtuple
+import hashlib
+import os
+
 from dns import *
+from utils import parse_dns_response, combine_chunks
+
+
+CommandMeta = namedtuple("CommandMeta", ["response", "server_address", "session_data","box"])
 
 def confirm(access_key, server_address, session_data, box) -> DNSRecord:
     confirm_cmd = f"confirm {access_key}"
@@ -14,13 +22,55 @@ def confirm(access_key, server_address, session_data, box) -> DNSRecord:
 def ls(args: list[str]):
     pass
 
-def get(args: list[str]):
-    pass
+
+def get(meta: CommandMeta, args: list[str]):
+    print("Warning: Priming the file for transfer may take a while. Please be patient.\n")
+
+    filename = args[0]
+    md5_hash, access_key, num_chunks = parse_dns_response(meta.response, meta.box)
+    if not md5_hash or not access_key or not num_chunks:
+        print("Error: Incomplete response from server.")
+        return
+
+    print(f"Retrieving file: {filename}. Have to collect {num_chunks} chunks. Expected MD5: {md5_hash}")
+
+    combined_b64 = combine_chunks(access_key, meta.server_address, num_chunks)
+
+    try:
+        encrypted_data = base64.b64decode(combined_b64)
+        decrypted_data = meta.box.decrypt(encrypted_data)
+    except Exception as e:
+        print(f"Error during decryption: {e}")
+        return
+
+    actual_md5 = hashlib.md5(decrypted_data).hexdigest()
+    print(f"Expected MD5: {md5_hash}")
+    print(f"Actual MD5: {actual_md5}")
+
+    if actual_md5 != md5_hash:
+        print("Error: MD5 checksum mismatch. File may be corrupt.")
+        return
+    print(f"File '{filename}' retrieved successfully.")
+    
+    if os.path.dirname(filename):
+        os.makedirs(os.path.dirname(filename), exist_ok=True)
+    
+    with open(filename, "wb") as f:
+        f.write(decrypted_data)
+
+    confirm_response = confirm(access_key, meta.server_address, meta.session_data, meta.box)
+    if confirm_response is None or confirm_response.header.rcode == RCODE.SERVFAIL:
+        print("Error: Failed to send confirm command.")
+        return
+    
+    print("File transfer confirmed with server.")
+
 
 COMMANDS = {
     "ls": ls,
     "get": get
 }
+
 
 def process(command: str, args: list[str]) -> None:
     if command not in COMMANDS:

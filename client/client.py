@@ -5,7 +5,7 @@ import hashlib
 import sys
 import os
 
-from commands import confirm
+from commands import CommandMeta, confirm, get
 from dns import send_dns_query, exchange_keys, validate_challenge, bytes_to_human_readable
 from utils import combine_chunks, parse_dns_response
 
@@ -13,14 +13,16 @@ def handle_cli(session_data, server_address):
     COMMANDS = ["ls", "get"]
 
     while True:
-        command = input("dftp> ")
-
-        if command.startswith("get"):
-            print("Warning: Priming the file for transfer may take a while. Please be patient.\n")
-
+        command = input("dftp> ").strip()
+            
         if command == "exit":
             print("Exiting client.")
             break
+
+        parts = command.split(maxsplit=1)
+        if parts[0] not in COMMANDS:
+            print("Error: Unknown command.")
+            continue
 
         box = Box(session_data["client_private_key"], PublicKey(base64.b64decode(session_data["server_public_key"])))
         encrypted = box.encrypt(command.encode('utf-8'))
@@ -34,16 +36,11 @@ def handle_cli(session_data, server_address):
             send_dns_query(f"{chunk}.{session_data['session_id']}._dftp.command.", server_address)
 
         response = send_dns_query(f"{session_data['session_id']}._dftp.endcommand.", server_address)
-
         if response is None or response.header.rcode == RCODE.SERVFAIL:
             print("Error: Invalid query or no response from server.")
             continue
 
-        parts = command.split(maxsplit=1)
-        if parts[0] not in COMMANDS:
-            print("Error: Unknown command.")
-            continue
-
+        meta = CommandMeta(response, server_address, session_data, box)
         if parts[0] == "ls":
             for rr in response.rr:
                 encrypted_entry_b64 = str(rr.rdata)
@@ -59,7 +56,6 @@ def handle_cli(session_data, server_address):
                     print(f"{dirname + '/':<30} {'-':>10} {'-':>32}")
 
             md5_hash, access_key, num_chunks = parse_dns_response(response, box)
-            # FIX: incorrect value validation ("" is None == False)
             if not md5_hash or not access_key or not num_chunks:
                 print("Error: Incomplete response from server.")
                 continue
@@ -105,44 +101,7 @@ def handle_cli(session_data, server_address):
             print("\nDirectory listing transfer confirmed with server.")
 
         elif parts[0] == "get" and len(parts) >= 2:
-            filename = parts[1]
-            md5_hash, access_key, num_chunks = parse_dns_response(response, box)
-            # FIX: incorrect value validation ("" is None == False)
-            if not md5_hash or not access_key or not num_chunks:
-                print("Error: Incomplete response from server.")
-                continue
-
-            print(f"Retrieving file: {filename}. Have to collect {num_chunks} chunks. Expected MD5: {md5_hash}")
-
-            combined_b64 = combine_chunks(access_key, server_address, num_chunks)
-
-            try:
-                encrypted_data = base64.b64decode(combined_b64)
-                decrypted_data = box.decrypt(encrypted_data)
-            except Exception as e:
-                print(f"Error during decryption: {e}")
-                continue
-
-            actual_md5 = hashlib.md5(decrypted_data).hexdigest()
-            print(f"Expected MD5: {md5_hash}")
-            print(f"Actual MD5: {actual_md5}")
-
-            if actual_md5 != md5_hash:
-                print("Error: MD5 checksum mismatch. File may be corrupt.")
-                continue
-            print(f"File '{filename}' retrieved successfully.")
-            
-            if os.path.dirname(filename):
-                os.makedirs(os.path.dirname(filename), exist_ok=True)
-            
-            with open(filename, "wb") as f:
-                f.write(decrypted_data)
-
-            confirm_response = confirm(access_key, server_address, session_data, box)
-            if confirm_response is None or confirm_response.header.rcode == RCODE.SERVFAIL:
-                print("Error: Failed to send confirm command.")
-                continue
-            print("File transfer confirmed with server.")
+            get(meta, parts[1:])
             
 
 def main():
