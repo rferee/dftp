@@ -148,11 +148,13 @@ def handle_ls_command(session_id, reply, private_key):
             entry_path = os.path.join(FILES_DIRECTORY, entry)
             if os.path.isfile(entry_path):
                 entry_type = "F"
+                file_size = os.path.getsize(entry_path)
+                entry_data = f"{entry_type}:{file_size}:{entry}"
             elif os.path.isdir(entry_path):
                 entry_type = "D"
+                entry_data = f"{entry_type}:{entry}"
             else:
                 continue
-            entry_data = f"{entry_type}:{entry}"
             encrypted_entry = box.encrypt(entry_data.encode('utf-8'))
             encrypted_entry_b64 = base64.b64encode(encrypted_entry).decode('utf-8')
             reply.add_answer(RR(session_id, QTYPE.TXT, rdata=TXT(encrypted_entry_b64)))

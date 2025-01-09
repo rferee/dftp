@@ -4,6 +4,7 @@ from nacl.public import PrivateKey, Box, PublicKey
 from tqdm import tqdm
 import base64
 import hashlib
+import math
 
 def send_dns_query(query_name, server_address):
     query = DNSRecord.question(query_name, qtype="TXT")
@@ -49,6 +50,14 @@ def validate_challenge(session_data, server_address):
 
     return validation_response.header.rcode == RCODE.NOERROR
 
+def bytes_to_human_readable(num_bytes):
+    """Convert bytes to a human-readable format."""
+    for unit in ['B', 'KB', 'MB', 'GB', 'TB']:
+        if num_bytes < 1024:
+            return f"{num_bytes:.2f} {unit}"
+        num_bytes /= 1024
+    return f"{num_bytes:.2f} PB"
+
 def handle_cli(session_data, server_address):
     while True:
         command = input("dftp> ")
@@ -60,7 +69,6 @@ def handle_cli(session_data, server_address):
             encrypted = box.encrypt(command.encode('utf-8'))
             b64_command = base64.b64encode(encrypted).decode('utf-8')
 
-            print(f"Sending command: {command}")
             send_dns_query(f"{session_data['session_id']}._dftp.begincommand.", server_address)
 
             chunk_size = 63
@@ -76,16 +84,20 @@ def handle_cli(session_data, server_address):
 
             parts = command.split()
             if parts[0] == "ls":
-                print("Listing files and directories:")
+                print(f"{'Filename':<30} {'Size':>10}")
+                print("-" * 42)
                 for rr in response.rr:
                     encrypted_entry_b64 = str(rr.rdata)
                     encrypted_entry = base64.b64decode(encrypted_entry_b64)
                     entry = box.decrypt(encrypted_entry).decode('utf-8')
-                    entry_type, entry_name = entry.split(':')
-                    if entry_type == "F":
-                        print(f"  File: {entry_name}")
-                    elif entry_type == "D":
-                        print(f"  Directory: {entry_name}/")
+                    entry_parts = entry.split(':')
+                    if entry_parts[0] == "F" and len(entry_parts) == 3:
+                        _, size_bytes, filename = entry_parts
+                        size_hr = bytes_to_human_readable(int(size_bytes))
+                        print(f"{filename:<30} {size_hr:>10}")
+                    elif entry_parts[0] == "D" and len(entry_parts) == 2:
+                        _, dirname = entry_parts
+                        print(f"{dirname + '/':<30} {'-':>10}")
             elif parts[0] == "get" and len(parts) == 2:
                 filename = parts[1]
                 md5_hash = ""
