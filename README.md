@@ -60,7 +60,7 @@ Non-existent.
 
 ## Contributing
 
-Before sending PRs, please reconsider your life choices and consider doing something more productive and useful. If you are nearing the point of insanity however, you are more than welcome to contribute. That said, consider that this repository is being mirrored from rferee's GitLab instance and that your PRs might be merged in funny ways, but rest assured that your contribution will be noted.
+Before sending PRs, please reconsider your life choices and consider doing something more productive and useful. If you are nearing the point of insanity however, you are more than welcome to contribute. That said, consider that this repository [is being mirrored from rferee's GitLab instance](https://gitlab.internal.rferee.dev/rferee/dftp) and that your PRs might be merged in funny ways, but rest assured that your contribution will be noted.
 
 ## License
 
