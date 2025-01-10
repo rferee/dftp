@@ -314,6 +314,11 @@ def handle_endcommand_query(qname, reply, private_key):
         print(f"Received command: {full_command}")
         parts = full_command.split(maxsplit=1)
 
+        if not session["isTrusted"]:
+            reply.header.rcode = RCODE.SERVFAIL
+            print("[DEBUG] Command processing failed, session is not trusted")
+            return
+
         if parts[0] == "ls":
             directory = parts[1] if len(parts) > 1 else ""
             handle_ls_command(session_id, reply, private_key, directory)
