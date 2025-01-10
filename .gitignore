@@ -2,3 +2,6 @@
 /server/files
 /server/25519key
 /server/25519key.pub
+
+venv
+__pycache__/
