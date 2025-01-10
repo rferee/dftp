@@ -3,7 +3,7 @@ import hashlib
 import os
 
 from dns import *
-from utils import parse_dns_response, combine_chunks
+from utils import parse_dns_response, combine_chunks, check_exists_response, execute_exists
 
 
 CommandMeta = namedtuple("CommandMeta", ["response", "server_address", "session_data","box"])
@@ -116,34 +116,9 @@ def exists(meta: CommandMeta, args: list[str]):
         return
     
     path = args[0]
-    exists_cmd = f"exists {path}"
-    enc_cmd = meta.box.encrypt(exists_cmd.encode('utf-8'))
-    b64_cmd = base64.b64encode(enc_cmd).decode('utf-8')
-    
-    send_dns_query(f"{meta.session_data['session_id']}._dftp.begincommand.", meta.server_address)
-    for i in range(0, len(b64_cmd), CHUNK_SIZE):
-        chunk = b64_cmd[i:i+CHUNK_SIZE]
-        send_dns_query(f"{chunk}.{meta.session_data['session_id']}._dftp.command.", meta.server_address)
-    response = send_dns_query(f"{meta.session_data['session_id']}._dftp.endcommand.", meta.server_address)
-    
-    if response is None:
-        print("Error: No response from server.")
-        return
-    
-    try:
-        decrypted_responses = []
-        for rr in response.rr:
-            encrypted_val_b64 = str(rr.rdata)
-            decrypted_val = meta.box.decrypt(base64.b64decode(encrypted_val_b64)).decode('utf-8')
-            decrypted_responses.append(decrypted_val)
-        
-        for line in decrypted_responses:
-            status, type_, name = line.split(':', 2)
-            exists = "true" if status == '1' else "false"
-            print(f"{exists}")
-    except Exception as e:
-        print(f"Error during decryption: {e}")
-        return
+    exists = execute_exists(meta, path)
+    print("true" if exists else "false")
+
 
 COMMANDS = {
     "ls": ls,
