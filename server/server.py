@@ -270,6 +270,33 @@ def handle_confirm_command(session_id, reply, private_key, access_key):
     reply.header.rcode = RCODE.NOERROR
     print(f"[DEBUG] Confirmed and removed chunks for access_key {access_key}")
 
+def handle_exists_command(session_id, reply, private_key, path):
+    box = create_box(private_key, client_sessions[session_id]["client_pubkey"])
+    response_lines = []
+    
+    print(f"[DEBUG] handle_exists_command called for session {session_id}, path: {path}")
+
+    if path.startswith("F:") or path.startswith("f:"):
+        file_path = os.path.join(FILES_DIRECTORY, path[2:])
+        exists = os.path.isfile(file_path)
+        status = "1" if exists else "0"
+        response_lines.append(f"{status}:F:{path[2:]}")
+    elif path.startswith("D:") or path.startswith("d:"):
+        dir_path = os.path.join(FILES_DIRECTORY, path[2:])
+        exists = os.path.isdir(dir_path)
+        status = "1" if exists else "0"
+        response_lines.append(f"{status}:D:{path[2:]}")
+    else:
+        reply.header.rcode = RCODE.SERVFAIL
+        return
+
+    encrypted_responses = [box.encrypt(line.encode('utf-8')) for line in response_lines]
+    for enc in encrypted_responses:
+        b64_enc = base64.b64encode(enc).decode('utf-8')
+        reply.add_answer(RR(session_id, QTYPE.TXT, rdata=TXT(b64_enc)))
+    
+    reply.header.rcode = RCODE.NOERROR
+
 def handle_endcommand_query(qname, reply, private_key):
     print(f"[DEBUG] handle_endcommand_query called with qname: {qname}")
     session_id = qname.split('.')[0]
@@ -294,6 +321,8 @@ def handle_endcommand_query(qname, reply, private_key):
             handle_get_command(session_id, reply, private_key, parts[1])
         elif parts[0] == "confirm" and len(parts) == 2:
             handle_confirm_command(session_id, reply, private_key, parts[1])
+        elif parts[0] == "exists" and len(parts) == 2:
+            handle_exists_command(session_id, reply, private_key, parts[1])
         else:
             reply.header.rcode = RCODE.SERVFAIL
             print(f"Unknown or invalid command: {full_command}")
