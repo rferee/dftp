@@ -3,13 +3,13 @@ from nacl.public import PrivateKey, Box, PublicKey
 import base64
 import sys
 
-from commands import CommandMeta, execute, COMMANDS
+from commands import CommandMeta, execute, COMMANDS, context
 from dns import send_dns_query, exchange_keys, validate_challenge, CHUNK_SIZE
 
 
 def handle_cli(session_data, server_address):
     while True:
-        user_input = input("dftp> ").strip()
+        user_input = input(f"{context['current_dir']} dftp> ").strip()
 
         if user_input == "exit":
             print("Exiting client.")
@@ -21,21 +21,7 @@ def handle_cli(session_data, server_address):
             continue
 
         box = Box(session_data["client_private_key"], PublicKey(base64.b64decode(session_data["server_public_key"])))
-        encrypted = box.encrypt(user_input.encode('utf-8'))
-        b64_command = base64.b64encode(encrypted).decode('utf-8')
-
-        send_dns_query(f"{session_data['session_id']}._dftp.begincommand.", server_address)
-
-        for i in range(0, len(b64_command), CHUNK_SIZE):
-            chunk = b64_command[i:i+CHUNK_SIZE]
-            send_dns_query(f"{chunk}.{session_data['session_id']}._dftp.command.", server_address)
-
-        response = send_dns_query(f"{session_data['session_id']}._dftp.endcommand.", server_address)
-        if response is None or response.header.rcode == RCODE.SERVFAIL:
-            print("Error: Invalid query or no response from server.")
-            continue
-
-        meta = CommandMeta(response, server_address, session_data, box)
+        meta = CommandMeta(server_address=server_address, session_data=session_data, box=box)
         execute(command, meta, args)
 
 
