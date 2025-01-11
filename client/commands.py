@@ -11,7 +11,7 @@ SELF_LINK_PATH = "."
 PARENT_LINK_PATH = ".."
 
 context = {
-    "current_dir": ROOT_PATH
+    "current_dir": ""
 }
 
 CommandMeta = namedtuple("CommandMeta", ["server_address", "session_data","box"])
@@ -42,7 +42,11 @@ def confirm(access_key, server_address, session_data, box) -> DNSRecord:
 
 def ls(meta: CommandMeta, args: list[str]):
 
-    response = send_command(meta, "ls " + context["current_dir"].strip("/") + PATH_SEPARATOR + args[0]) if len(args) == 1 else send_command(meta, "ls " + context["current_dir"].strip("/"))
+    context_path = context["current_dir"]
+    if len(args) == 1:
+        context_path = context["current_dir"] + PATH_SEPARATOR + args[0]
+
+    response = send_command(meta, "ls " + context_path.strip("/"))
 
     md5_hash, access_key, num_chunks = parse_dns_response(response, meta.box)
     if not md5_hash or not access_key or not num_chunks:
@@ -98,9 +102,19 @@ def get(meta: CommandMeta, args: list[str]):
         print("Usage: get <path>")
         return
 
-    filename = args[0]
+    context_path = context["current_dir"]
 
-    response = send_command(meta, "get " + context["current_dir"] + PATH_SEPARATOR + filename)
+    path = args[0]
+    filename = args[0].strip("/")
+
+    # handle absolute path
+    if path.startswith("/"):
+        context_path = path.strip("/")
+    # handle relative path
+    else:
+        context_path = context["current_dir"] + PATH_SEPARATOR + filename
+
+    response = send_command(meta, "get " + context_path.strip("/"))
     md5_hash, access_key, num_chunks = parse_dns_response(response, meta.box)
     if not md5_hash or not access_key or not num_chunks:
         print("Error: Incomplete response from server.")
@@ -153,7 +167,7 @@ def exists(meta: CommandMeta, args: list[str]):
 def cd(meta: CommandMeta, args: list[str]):
     # handle `cd` (jump to root directory)
     if len(args) == 0:
-        context["current_dir"] = ROOT_PATH
+        context["current_dir"] = ""
         return
     
     if len(args) != 1:
@@ -164,23 +178,22 @@ def cd(meta: CommandMeta, args: list[str]):
 
     # handle `cd /` (jump to root directory)
     if path == ROOT_PATH:
-        context["current_dir"] = ROOT_PATH
+        context["current_dir"] = ""
         return
     
     # handle absolute path
     if path.startswith("/"):
-        if not execute_exists(meta, path):
-            print(f"Error: Directory '{tmp_path}' not found")
+        if not execute_exists(meta, "D:" + path.strip("/")):
+            print(f"Error: Directory '{path}' not found")
             return
-        context["current_dir"] = path
+        context["current_dir"] = path.strip("/")
         return
     
     # handle `cd ../` in root directory
     if context["current_dir"] == ROOT_PATH and path == PARENT_LINK_PATH:
-        print("You are already in root directory")
         return
 
-    tmp_path = context["current_dir"].split(PATH_SEPARATOR) if context["current_dir"] != ROOT_PATH else []
+    tmp_path = context["current_dir"].split(PATH_SEPARATOR) if len(context["current_dir"]) != 0 else []
     for subdir in path.split(PATH_SEPARATOR):
         if subdir == PARENT_LINK_PATH and len(tmp_path) != 0:
             tmp_path.pop()
@@ -190,11 +203,11 @@ def cd(meta: CommandMeta, args: list[str]):
         tmp_path.append(subdir)
 
     tmp_path = PATH_SEPARATOR.join(tmp_path)
-    if not execute_exists(meta, "D:" + tmp_path):
+    if not execute_exists(meta, "D:" + tmp_path.strip("/")):
         print(f"Error: Directory '{tmp_path}' not found")
         return
     
-    context["current_dir"] = PATH_SEPARATOR + tmp_path
+    context["current_dir"] = tmp_path
 
 
 COMMANDS = {

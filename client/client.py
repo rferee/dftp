@@ -9,7 +9,7 @@ from dns import send_dns_query, exchange_keys, validate_challenge, CHUNK_SIZE
 
 def handle_cli(session_data, server_address):
     while True:
-        user_input = input(f"{context['current_dir']} dftp> ").strip()
+        user_input = input(f"/{context['current_dir']} dftp> ").strip()
 
         if user_input == "exit":
             print("Exiting client.")
@@ -34,9 +34,7 @@ def main():
         except:
             print("Error: Can't parse server address.")
             print("Using default:", SERVER_ADDRESS)
-            SERVER_ADDRESS = ("127.0.0.1", 5500)
      
-
     client_private_key = PrivateKey.generate()
 
     session_data = exchange_keys(client_private_key, SERVER_ADDRESS)
