@@ -37,6 +37,21 @@ def exchange_keys(client_private_key, server_address):
     box = Box(client_private_key, PublicKey(server_public_key))
     challenge = box.decrypt(encrypted_challenge).decode('utf-8')
 
+    # Perform validation with normal command steps
+    begin_resp = send_dns_query(f"{session_id}._dftp.begincommand.", server_address)
+    validate_cmd = f"validate {challenge}"
+    enc_cmd = box.encrypt(validate_cmd.encode('utf-8'))
+    b64_cmd = base64.b64encode(enc_cmd).decode('utf-8')
+
+    for i in range(0, len(b64_cmd), CHUNK_SIZE):
+        chunk = b64_cmd[i:i+CHUNK_SIZE]
+        send_dns_query(f"{chunk}.{session_id}._dftp.command.", server_address)
+
+    end_resp = send_dns_query(f"{session_id}._dftp.endcommand.", server_address)
+    if end_resp is None or end_resp.header.rcode == 2:
+        print("Unable to complete handshake")
+        exit(1)
+
     return {
         "client_public_key": client_public_key_b64,
         "server_public_key": server_public_key_b64,
@@ -44,14 +59,6 @@ def exchange_keys(client_private_key, server_address):
         "challenge": challenge,
         "client_private_key": client_private_key
     }
-
-def validate_challenge(session_data, server_address):
-    challenge = session_data["challenge"]
-    session_id = session_data["session_id"]
-
-    validation_response = send_dns_query(f"{sanitize_dns_label(challenge)}.{session_id}._dftp.validate.", server_address)
-
-    return validation_response.header.rcode == RCODE.NOERROR
 
 def bytes_to_human_readable(num_bytes):
     """Convert bytes to a human-readable format."""

@@ -4,12 +4,14 @@ import base64
 import sys
 
 from commands import CommandMeta, execute, COMMANDS, context
-from dns import send_dns_query, exchange_keys, validate_challenge, CHUNK_SIZE
+from dns import send_dns_query, exchange_keys, CHUNK_SIZE
 
 
 def handle_cli(session_data, server_address):
     while True:
-        user_input = input(f"/{context['current_dir']} dftp> ").strip()
+        current_dir = context['current_dir']
+        prompt = f"/{current_dir}/ dftp> " if current_dir else "/ dftp> "
+        user_input = input(prompt).strip()
 
         if user_input == "exit":
             print("Exiting client.")
@@ -42,12 +44,6 @@ def main():
     print("Client key exchange completed.")
     print(f"Session ID: {session_data['session_id']}")
     print(f"Challenge: {session_data['challenge']}")
-
-    if validate_challenge(session_data, SERVER_ADDRESS):
-        print("Challenge validation successful.")
-    else:
-        print("Challenge validation failed.")
-        return
 
     handle_cli(session_data, SERVER_ADDRESS)
 

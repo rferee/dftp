@@ -67,25 +67,6 @@ def handle_exchange_query(qname, reply, private_key):
     reply.add_answer(RR(qname, QTYPE.TXT, rdata=TXT(f"SID:{session_id}")))
     print(f"[DEBUG] New session established with session_id: {session_id}")
 
-def handle_validate_query(qname, reply):
-    print(f"[DEBUG] handle_validate_query called with qname: {qname}")
-    parts = qname.split('.')
-    decrypted_challenge = parts[0].encode('utf-8')
-    session_id = parts[1]
-
-    session = get_session_or_fail(session_id, reply)
-    if not session:
-        print(f"[DEBUG] Validation failed for session {session_id}")
-        return
-
-    if decrypted_challenge == session["challenge"]:
-        session["isTrusted"] = True
-        reply.header.rcode = RCODE.NOERROR
-        print(f"[DEBUG] Session {session_id} validated successfully")
-    else:
-        reply.header.rcode = RCODE.SERVFAIL
-        print(f"[DEBUG] Validation failed for session {session_id}")
-
 def handle_command_query(qname, reply, private_key):
     print(f"[DEBUG] handle_command_query called with qname: {qname}")
     parts = qname.split('.')
@@ -314,12 +295,20 @@ def handle_endcommand_query(qname, reply, private_key):
         print(f"Received command: {full_command}")
         parts = full_command.split(maxsplit=1)
 
-        if not session["isTrusted"]:
+        # Reject any command if the session is not trusted and command is not validate
+        if not session["isTrusted"] and parts[0] != "validate":
             reply.header.rcode = RCODE.SERVFAIL
-            print("[DEBUG] Command processing failed, session is not trusted")
             return
 
-        if parts[0] == "ls":
+        if parts[0] == "validate" and len(parts) == 2:
+            if parts[1].encode('utf-8') == session["challenge"]:
+                session["isTrusted"] = True
+                reply.header.rcode = RCODE.NOERROR
+            else:
+                del client_sessions[session_id]
+                reply.header.rcode = RCODE.SERVFAIL
+            return
+        elif parts[0] == "ls":
             directory = parts[1] if len(parts) > 1 else ""
             handle_ls_command(session_id, reply, private_key, directory)
         elif parts[0] == "get" and len(parts) >= 2:
@@ -359,8 +348,6 @@ class DNSHandler(socketserver.BaseRequestHandler):
                 handle_version_query(qname, reply)
             elif qtype == "TXT" and qname.endswith("._dftp.exchange."):
                 handle_exchange_query(qname, reply, private_key)
-            elif qtype == "TXT" and qname.endswith("._dftp.validate."):
-                handle_validate_query(qname, reply)
             elif qtype == "TXT" and qname.endswith("._dftp.begincommand."):
                 handle_begincommand_query(qname, reply)
             elif qtype == "TXT" and qname.endswith("._dftp.command."):
