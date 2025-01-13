@@ -308,6 +308,25 @@ def handle_endcommand_query(qname, reply, private_key):
                 del client_sessions[session_id]
                 reply.header.rcode = RCODE.SERVFAIL
             return
+        elif parts[0] == "chunk" and len(parts) == 2:
+            try:
+                chunk_str, access_key = parts[1].split('.', 1)
+                if not chunk_str.isdigit():
+                    reply.header.rcode = RCODE.SERVFAIL
+                    return
+                chunk_file = os.path.join(CHUNKS_DIRECTORY, f"{chunk_str}.{access_key}.chunk")
+                if not os.path.exists(chunk_file):
+                    reply.header.rcode = RCODE.SERVFAIL
+                    return
+
+                with open(chunk_file, "r") as cf:
+                    chunk_data = cf.read()
+
+                reply.add_answer(RR(session_id, QTYPE.TXT, rdata=TXT(chunk_data)))
+                reply.header.rcode = RCODE.NOERROR
+            except:
+                reply.header.rcode = RCODE.SERVFAIL
+            return
         elif parts[0] == "ls":
             directory = parts[1] if len(parts) > 1 else ""
             handle_ls_command(session_id, reply, private_key, directory)

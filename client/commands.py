@@ -4,6 +4,7 @@ import os
 
 from dns import *
 from utils import parse_dns_response, combine_chunks, execute_exists
+from tqdm import tqdm
 
 PATH_SEPARATOR = "/"
 ROOT_PATH = "/"
@@ -154,6 +155,69 @@ def get(meta: CommandMeta, args: list[str]):
     print("File transfer confirmed with server.")
 
 
+def nget(meta: CommandMeta, args: list[str]):
+    if len(args) != 1:
+        print("Usage: nget <path>")
+        return
+
+    path = args[0].strip("/")
+
+    response = send_command(meta, "get " + path)
+    md5_hash, access_key, num_chunks = parse_dns_response(response, meta.box)
+    if not md5_hash or not access_key or not num_chunks:
+        print("Error: Incomplete response from server.")
+        return
+
+    print(f"Retrieving file: {path}. Collecting {num_chunks} chunks. Expected MD5: {md5_hash}")
+
+    combined_b64_chunks = []
+    for chunk_num in tqdm(range(num_chunks)):
+        send_dns_query(f"{meta.session_data['session_id']}._dftp.begincommand.", meta.server_address)
+
+        cmd = f"chunk {chunk_num}.{access_key}"
+        enc_cmd = meta.box.encrypt(cmd.encode('utf-8'))
+        b64_cmd = base64.b64encode(enc_cmd).decode('utf-8')
+        
+        for i in range(0, len(b64_cmd), CHUNK_SIZE):
+            chunk = b64_cmd[i:i+CHUNK_SIZE]
+            send_dns_query(f"{chunk}.{meta.session_data['session_id']}._dftp.command.", meta.server_address)
+
+        chunk_end = send_dns_query(f"{meta.session_data['session_id']}._dftp.endcommand.", meta.server_address)
+        if not chunk_end or chunk_end.header.rcode == RCODE.SERVFAIL:
+            print(f"Error retrieving chunk {chunk_num}")
+            return
+        for rr in chunk_end.rr:
+            combined_b64_chunks.append(str(rr.rdata))
+
+    combined_b64 = ''.join(combined_b64_chunks)
+    try:
+        encrypted_data = base64.b64decode(combined_b64)
+        decrypted_data = meta.box.decrypt(encrypted_data)
+    except Exception as e:
+        print(f"Error during decryption: {e}")
+        return
+
+    actual_md5 = hashlib.md5(decrypted_data).hexdigest()
+    print(f"Expected MD5: {md5_hash}")
+    print(f"Actual MD5: {actual_md5}")
+    if actual_md5 != md5_hash:
+        print("Error: MD5 checksum mismatch.")
+        return
+
+    filename = path
+    if os.path.dirname(filename):
+        os.makedirs(os.path.dirname(filename), exist_ok=True)
+    with open(filename, "wb") as f:
+        f.write(decrypted_data)
+
+    # confirm command
+    confirm_response = confirm(access_key, meta.server_address, meta.session_data, meta.box)
+    if confirm_response is None or confirm_response.header.rcode == RCODE.SERVFAIL:
+        print("Error: Failed to send confirm command.")
+        return
+    print(f"File '{filename}' retrieved and confirmed successfully.")
+
+
 def exists(meta: CommandMeta, args: list[str]):
     if len(args) != 1:
         print("Usage: exists <path>")
@@ -214,7 +278,8 @@ COMMANDS = {
     "ls": ls,
     "get": get,
     "exists": exists,
-    "cd": cd
+    "cd": cd,
+    "nget": nget
 }
 
 
