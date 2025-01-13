@@ -50,6 +50,7 @@ To use the DFTP client:
 python client/client.py --server 127.0.0.1:5500
 ```
 Once connected, you can use the following commands:
+- `cd <path>`: Change directory, supports absolute and relative path navigation.
 - `ls` : List files and directories on the server.
 - `get <filename>` : Download a specific file from the server.
 - `exit` : Exit the client application.

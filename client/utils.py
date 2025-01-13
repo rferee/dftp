@@ -23,6 +23,7 @@ def parse_dns_response(response: DNSRecord, box: Box) -> tuple:
 
 
 def check_exists_response(response: DNSRecord, box: Box) -> bool:
+    # TODO: remove for loop
     try:
         for rr in response.rr:
             encrypted_val_b64 = str(rr.rdata)
@@ -74,6 +75,6 @@ def execute_exists(meta: CommandMeta, path: str) -> bool:
     if response is None:
         print("Error: No response from server.")
         return False
-    
+
     exists = check_exists_response(response, meta.box)
     return exists
